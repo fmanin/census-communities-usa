@@ -106,6 +106,31 @@ def tract_origin_destination(tract_code, year):
     resp.headers['Content-Type'] = 'application/json'
     resp.headers['Cache-Control'] = 'public, max-age=31536000'
     return resp
+    
+@app.route('/tract-totals/<year>/')
+@crossdomain(origin="*")
+def tract_totals(year):
+    conn = psycopg2.connect('host=%s dbname=census user=census' % DB_HOST)
+    origin_cursor = conn.cursor()
+    dest_cursor = conn.cursor()
+    dest_query = """select 
+        substring(w_geocode from 1 for 11) as work, 
+        sum(s000) as total_jobs from origin_destination 
+        where data_year = %(year)s  order by total_jobs desc;"""
+    dest_cursor.execute(dest_query, {'year': int(year)})
+    dest_results = dest_cursor.fetchall()
+    origin_query = """select 
+        substring(h_geocode from 1 for 11) as home, 
+        sum(s000) as total_jobs from origin_destination 
+        where data_year = %(year)s group by home order by total_jobs desc;"""
+    origin_cursor.execute(origin_query, {'year': int(year)})
+    origin_results = origin_cursor.fetchall()
+    results = {'traveling-to': [{d[0]: d[1]} for d in dest_results if d[1] >= 20]}
+    results['traveling-from'] = [{o[0]: o[1]} for o in origin_results if o[1] >= 20]
+    resp = make_response(json.dumps(results))
+    resp.headers['Content-Type'] = 'application/json'
+    resp.headers['Cache-Control'] = 'public, max-age=31536000'
+    return resp
 
 @app.route('/tract-average/<tract_code>/')
 def tract_average(tract_code):
